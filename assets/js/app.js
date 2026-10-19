@@ -174,8 +174,9 @@ function openPiece(id){
   $('#prKeep').focus({preventScroll:true}); say(`${p.name}. ${p.tagline}. Profile open.`);
 }
 function syncKeep(){const k=$('#prKeep'),on=cur&&S.board.includes(cur.id);k.classList.toggle('done',!!on);k.setAttribute('aria-label',on?'On your Board':'Keep on Board');k.textContent=on?'♥':'♡';
-  const l=$('#prLater');l.textContent=on?'♥ On your Board':'♡ Keep for later';l.classList.toggle('done',!!on)}
-function closePiece(cb){if(PR.hidden){cb&&cb();return}if(cur)addDwell(cur.id,Date.now()-prT);PR.classList.add('closing');setTimeout(()=>{PR.hidden=true;PR.classList.remove('closing');cur=null;cb&&cb()},cb?260:280)}
+  const l=$('#prLater');l.textContent=on?'♥ On your Board':'♡ Keep for later';l.classList.toggle('done',!!on);
+  const others=selIds().filter(x=>x!==cur.id).length;$('#prBuy').textContent=others?`Buy ${others+1} pieces · review order`:'Buy now'}
+function closePiece(cb){if(PR.hidden){cb&&cb();return}if(cur)addDwell(cur.id,Date.now()-prT);PR.classList.add('closing');setTimeout(()=>{PR.hidden=true;PR.classList.remove('closing');cur=null;if(retBoard){retBoard=false;renderBoard();B.hidden=false}cb&&cb()},cb?260:280)}
 function profileDecide(kind){ if(!cur)return; const id=cur.id;
   if(S.order[0]===id){closePiece(()=>kind==='keep'?keep():pass());return}
   if(kind==='keep'&&!S.board.includes(id)){S.board.push(id);persist();sig(id).k=Date.now();touchSig(id);S.keptAt[id]=S.swipes;render();syncKeep();say(`Kept ${cur.name}.`);return}
@@ -184,7 +185,7 @@ function profileDecide(kind){ if(!cur)return; const id=cur.id;
 }
 $('#prKeep').onclick=()=>profileDecide('keep'); $('#prPass').onclick=()=>profileDecide('pass');
 $('#prClose').onclick=()=>closePiece();
-$('#prBuy').onclick=()=>cur&&makeItYours(cur.id);
+$('#prBuy').onclick=profileBuy;
 $('#prLater').onclick=()=>{if(cur&&!S.board.includes(cur.id))profileDecide('keep')};
 $('#prAskBtn').onclick=()=>{$('#prMore').open=true;$('#prAskH').scrollIntoView({behavior:'smooth',block:'center'});setTimeout(()=>PR.querySelector('.pr-ask button').focus({preventScroll:true}),350)};
 $('#prPrev').onclick=()=>showFrame(fi-1); $('#prNext').onclick=()=>showFrame(fi+1);
@@ -209,17 +210,15 @@ $('#prPinGo').onclick=pinGo; $('#prPin').addEventListener('keydown',e=>{if(e.key
   ['#prPrev','#prNext'].forEach(s=>$(s).addEventListener('click',e=>{if(Math.abs(e.clientX-x0)>12||Math.abs(e.clientY-y0)>12){e.stopImmediatePropagation()}},true));
 })();
 
-/* ---- Board: opens on one piece ---- */
-const B=$('#board'), BL=$('#bLead');
-let leadId=null, stillNext=false, snackT, lastLet=null;
+/* ---- Board: tick what you want, buy together (no gestures) ---- */
+const B=$('#board'), RV=$('#review');
+let leadId=null, sel=new Set(), selInit=false, snackT, lastRm=null, retBoard=false;
 const bgOf=p=>p.kind==='ai'?`linear-gradient(${p.bgt},${p.bgt} 22%,${p.bgb} 78%,${p.bgb})`:p.bg;
-const thumb=(p,cls='')=>`<button class="${p.kind==='ai'?'':'cover '}${cls}" data-id="${p.id}" style="background:${bgOf(p)}" aria-label="Show ${p.name} first"><img src="${p.img}" alt=""></button>`;
 function boardLists(){
   const now=Date.now(), ids=boardIds();
   let act=ids.filter(id=>now-(sig(id).l||sig(id).k||now)<STALE), early=ids.filter(id=>!act.includes(id));
   if(!act.length){act=early;early=[]}
   act.sort((a,b)=>rankScore(b)-rankScore(a));
-  if(leadId&&act.includes(leadId))act=[leadId,...act.filter(i=>i!==leadId)];
   return {act,early};
 }
 function why(id,act){const g=sig(id),p=byId[id];
@@ -231,83 +230,78 @@ function why(id,act){const g=sig(id),p=byId[id];
   if(act.every(o=>sig(o).k<=g.k))return 'Your most recent keep';
   return 'On your Board';
 }
-function renderBoard(anim,prev){
-  const {act,early}=boardLists(), lead=act[0];
-  B.classList.toggle('is-empty',!lead); $('#bcount').textContent=act.length+early.length;
-  leadId=lead||null;
-  if(lead){const p=byId[lead];
-    BL.className='b-lead'+(p.kind==='ai'?'':' cover'); BL.style.transform=''; BL.style.opacity='';
-    $('#bImg').style.background=bgOf(p);
-    $('#bImg').innerHTML=`<img src="${p.img}" alt="" draggable="false"><span class="tag">${LBL[p.kind]}</span>`;
-    BL.setAttribute('aria-label',`${p.name}. Swipe left to let it go, right or tap to make it yours.`);
-    const w=$('#bWhy'); w.classList.toggle('still',stillNext);
-    w.textContent=stillNext?'Still thinking':act.length===1&&!early.length?'The only piece on your Board':why(lead,act);
-    $('#bName').textContent=p.name; $('#bName').setAttribute('aria-label',`Open ${p.name} profile`);
-    $('#bStrip').innerHTML=act.slice(1).map(id=>thumb(byId[id],id===prev?'arrive':'')).join('');
-    $('#bStripWrap').hidden=act.length<2; $('#bMore').hidden=act.length>1||early.length>0;
-    if(anim){void BL.offsetWidth;BL.classList.add(anim)}
+const selIds=()=>boardIds().filter(id=>sel.has(id));
+function tickBtn(id,big){const on=sel.has(id),n=byId[id].name;return `<button class="tick${on?' on':''}${big?' big':''}" data-act="tick" data-id="${id}" role="checkbox" aria-checked="${on}" aria-label="Select ${n}">${on?'✓':''}</button>`}
+function rowEl(id){const p=byId[id],on=sel.has(id);
+  return `<div class="b-row${on?' sel':''}" data-id="${id}"><button class="b-th${p.kind==='ai'?'':' cover'}" data-act="open" data-id="${id}" style="background:${bgOf(p)}" aria-label="Details: ${p.name}"><img src="${p.img}" alt=""></button>
+   <div class="b-rt"><p class="b-rn">${p.name}${p.size==='large'?'<span class="lg">Large piece</span>':''}</p><p class="b-rp">Price<span class="dot">·</span><button class="lnk" data-act="open" data-id="${id}">Details ›</button><span class="dot">·</span><button class="lnk" data-act="remove" data-id="${id}">Remove</button></p></div>${tickBtn(id)}</div>`}
+function renderBoard(){
+  const {act,early}=boardLists(), lead=act[0], all=[...act,...early];
+  if(!selInit&&lead){sel=new Set([lead]);selInit=true}
+  B.classList.toggle('is-empty',!lead); $('#bcount').textContent=all.length; leadId=lead||null;
+  if(lead){const p=byId[lead],on=sel.has(lead);
+    const L=$('#bLead'); L.className='b-lead'+(p.kind==='ai'?'':' cover')+(on?' sel':''); L.style.background=bgOf(p);
+    $('#bPic').innerHTML=`<img src="${p.img}" alt="">`; $('#bPic').setAttribute('aria-label',`Details: ${p.name}`);
+    $('#bChip').textContent=LBL[p.kind];
+    const t=$('#bTick'); t.className='tick big'+(on?' on':''); t.textContent=on?'✓':''; t.setAttribute('aria-checked',on); t.setAttribute('aria-label',`Select ${p.name}`); t.dataset.id=lead;
+    $('#bWhy').textContent=act.length===1&&!early.length?'The only piece on your Board':why(lead,act);
+    $('#bName').textContent=p.name; $('#bLarge').hidden=p.size!=='large';
+    const pr=p.pairs.filter(o=>all.includes(o)&&o!==lead).map(o=>byId[o].name);
+    $('#bPairs').hidden=!pr.length; $('#bPairs').innerHTML=pr.length?`<span aria-hidden="true">✦</span> Pairs with ${pr.join(' and ')}, also on your Board`:'';
+    $('#bAlso').textContent=act.length>1?`Also kept · ${act.length-1}`:'';
+    $('#bList').innerHTML=act.slice(1).map(rowEl).join('');
   }
-  const E=$('#bEarlier'); E.hidden=!early.length;
-  $('#bEarlierN').textContent=`Earlier · ${early.length}`;
-  $('#bEarlierMini').innerHTML=early.slice(0,4).map(id=>`<img src="${byId[id].img}" alt="" style="background:${bgOf(byId[id])}">`).join('');
-  $('#bEarlierList').innerHTML=early.map(id=>thumb(byId[id])).join('');
-  const y=S.bought.filter(id=>byId[id]); $('#bYours').hidden=!y.length; $('#bYours').textContent=y.length?`Yours: ${y.map(id=>byId[id].name).join(', ')} ✓`:'';
+  const E=$('#bEarlier'); E.hidden=!early.length; $('#bEarlierN').textContent=`Earlier · ${early.length}`; $('#bEarlierList').innerHTML=early.map(rowEl).join('');
+  const allOn=all.length>0&&all.every(id=>sel.has(id));
+  $('#bAll').textContent=allOn?'Clear all':'Select all'; $('#bAll').hidden=all.length<2; $('#bListHead').hidden=!lead;
+  syncBuy();
 }
-function openBoard(){closePiece();renderBoard();B.hidden=false;$('#bEarlier').open=false;$('#bclose').focus({preventScroll:true});
-  say(leadId?`Your Board. ${byId[leadId].name} first. ${$('#bWhy').textContent}.`:'Your Board is empty.')}
-function closeBoard(){B.hidden=true;stillNext=false;hideSnack()}
-function swapLead(id){if(!id||id===leadId)return;const prev=leadId;leadId=id;stillNext=false;touchSig(id);renderBoard('swap-in',prev);say(`${byId[id].name} first.`)}
-function letGo(){const id=leadId;if(!id)return;const p=byId[id];
-  BL.classList.add('anim');BL.style.transform='translateX(-130%) rotate(-14deg)';BL.style.opacity='0';
-  setTimeout(()=>{lastLet={id,board:S.board.slice()};S.board=S.board.filter(x=>x!==id);persist();leadId=null;stillNext=false;
-    renderBoard('swap-in');render();
-    $('#bSnackT').textContent=`Let go of ${p.name}.`;$('#bSnack').classList.add('on');clearTimeout(snackT);snackT=setTimeout(hideSnack,5000);
-    say(`Let go of ${p.name}. It stays in the store. Undo available.`)},280)}
+function syncBuy(){const ids=selIds(),n=ids.length,big=ids.filter(id=>byId[id].size==='large').length,b=$('#bBuy');
+  b.disabled=!n; b.textContent=n?`Buy ${n} piece${n>1?'s':''} · Price`:'Select a piece';
+  const note=big?`Includes ${big} large piece${big>1?'s':''}: we'll call to plan ${big>1?'their':'its'} delivery.`:'';
+  $('#bNote').textContent=note; $('#bNote').hidden=!note; $('#bSticky').hidden=B.classList.contains('is-empty');
+  if(!PR.hidden&&cur)syncKeep();
+}
+function toggle(id){if(sel.has(id))sel.delete(id);else sel.add(id);renderBoard();const f=B.querySelector(`.tick[data-id="${id}"]`);f&&f.focus({preventScroll:true});const n=selIds().length;say(`${byId[id].name} ${sel.has(id)?'selected':'unselected'}. ${n} selected.`)}
+function removePiece(id){const p=byId[id];lastRm={id,board:S.board.slice(),on:sel.has(id)};
+  S.board=S.board.filter(x=>x!==id);sel.delete(id);persist();renderBoard();render();
+  $('#bSnackT').textContent=`${p.name} removed from your Board.`;$('#bSnack').classList.add('on');clearTimeout(snackT);snackT=setTimeout(hideSnack,6000);
+  say(`${p.name} removed. Undo available.`)}
 function hideSnack(){$('#bSnack').classList.remove('on')}
-$('#bUndo').onclick=()=>{if(!lastLet)return;S.board=lastLet.board;persist();leadId=lastLet.id;lastLet=null;hideSnack();renderBoard('swap-in');render();say(`${byId[leadId].name} is back.`)};
-(()=>{let x0,y0,dx=0,on=false,moved=false;const go=$('#bStampGo'),yes=$('#bStampYes'),cl=v=>Math.max(0,Math.min(1,v));
-  const reset=()=>{BL.classList.add('anim');BL.style.transform='';go.style.opacity=0;yes.style.opacity=0};
-  BL.addEventListener('pointerdown',e=>{if(!leadId)return;on=true;moved=false;x0=e.clientX;y0=e.clientY;dx=0;BL.setPointerCapture(e.pointerId);BL.classList.remove('anim','swap-in')});
-  BL.addEventListener('pointermove',e=>{if(!on)return;dx=e.clientX-x0;const dy=e.clientY-y0;if(Math.abs(dx)+Math.abs(dy)>6)moved=true;
-    BL.style.transform=`translateX(${dx}px) rotate(${dx/22}deg)`;go.style.opacity=cl(-dx/100);yes.style.opacity=cl(dx/100)});
-  const end=()=>{if(!on)return;on=false;const T=Math.min(100,innerWidth*.25);
-    if(dx<-T){go.style.opacity=0;letGo()}else{reset();if(dx>T||!moved)makeItYours(leadId)}};
-  BL.addEventListener('pointerup',end);BL.addEventListener('pointercancel',()=>{if(on){on=false;reset()}});
-})();
-$('#bStrip').onclick=e=>{const b=e.target.closest('button[data-id]');if(b)swapLead(b.dataset.id)};
-$('#bEarlierList').onclick=e=>{const b=e.target.closest('button[data-id]');if(b){touchSig(b.dataset.id);leadId=b.dataset.id;renderBoard('swap-in')}};
-$('#bBuy').onclick=()=>makeItYours(leadId);
-$('#bName').onclick=()=>{const id=leadId;if(id){B.hidden=true;openPiece(id)}};
+$('#bUndo').onclick=()=>{if(!lastRm)return;S.board=lastRm.board;persist();if(lastRm.on)sel.add(lastRm.id);const n=byId[lastRm.id].name;lastRm=null;hideSnack();renderBoard();render();say(`${n} is back.`)};
+function boardDetails(id){retBoard=true;B.hidden=true;openPiece(id)}
+B.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const id=b.dataset.id;
+  if(b.dataset.act==='tick')toggle(id);else if(b.dataset.act==='open')boardDetails(id);else if(b.dataset.act==='remove')removePiece(id)});
+$('#bPic').onclick=$('#bDetails').onclick=()=>leadId&&boardDetails(leadId);
+$('#bRemove').onclick=()=>leadId&&removePiece(leadId);
+$('#bAll').onclick=()=>{const all=boardIds();if(all.every(id=>sel.has(id)))sel.clear();else all.forEach(id=>sel.add(id));renderBoard();say($('#bAll').textContent==='Clear all'?'All selected.':'Selection cleared.')};
+function openBoard(){retBoard=false;if(!PR.hidden)closePiece();renderBoard();B.hidden=false;$('#bEarlier').open=false;$('#bclose').focus({preventScroll:true});
+  say(leadId?`Your Board. ${byId[leadId].name} first, selected. ${$('#bBuy').textContent}.`:'Your Board is empty.')}
+function closeBoard(){B.hidden=true;hideSnack()}
 $('#boardBtn').onclick=()=>openBoard();
 $('#bclose').onclick=()=>closeBoard();
-$('#bMore').onclick=$('#bBack').onclick=()=>{closeBoard();if(!S.order.length)restart()};
-/* ---- Make it yours: small pieces go to (stub) checkout; large pieces offer a call first ---- */
-const WA='https://wa.me/919001291131?text=';
-function makeItYours(id){const p=byId[id];if(!p)return;
-  if(p.size==='large'){
-    $('#bsEy').textContent=`${p.name} · Price`;
-    $('#bsSub').textContent=`We'll show you the exact ${p.type?p.type.toLowerCase():'piece'} on a call: its size, finish and how delivery works. Large pieces leave our workshop in 7–15 business days.`;
-    $('#bsVideo').href=WA+encodeURIComponent(`Namaste Craftstales, I'd like a video call to see the ${p.name}.`);
-    $('#bsWa').href=WA+encodeURIComponent(`Namaste Craftstales, I have a question about the ${p.name}.`);
-    $('#bsBuy').dataset.id=id; $('#bigSheet').hidden=false; $('#bsVideo').focus({preventScroll:true}); say(`${p.name} is a large piece. Video call or WhatsApp first, or buy without a call.`);
-  } else confirmBuy(id);
+$('#bBack').onclick=()=>{closeBoard();if(!S.order.length)restart()};
+$('#bBuy').onclick=()=>{if(selIds().length)openReview()};
+/* ---- order review ---- */
+function etaText(p,pin){const r=pin&&eta(p,pin);
+  const base=r||`Leaves Jodhpur in ${p.size==='large'?'7–15':'3–7'} business days${p.size==='large'?', crated':''}. Add your PIN for an arrival estimate.`;
+  return base+(p.size==='large'?'<br>We\'ll call to plan delivery.':'')}
+function renderReview(){const ids=selIds(),pin=store.get('pin',''),big=ids.filter(id=>byId[id].size==='large').length;
+  $('#rH').textContent=`${ids.length} piece${ids.length>1?'s':''}`;
+  $('#rList').innerHTML=ids.map(id=>{const p=byId[id];return `<div class="r-row"><div class="b-th${p.kind==='ai'?'':' cover'}" style="background:${bgOf(p)}"><img src="${p.img}" alt=""></div><div class="b-rt"><div class="r-h"><p class="b-rn">${p.name}</p><span class="b-price">Price</span></div><p class="r-eta">${etaText(p,pin)}</p></div></div>`}).join('');
+  $('#rPin').value=pin; $('#rPinMsg').textContent='';
+  $('#rPay').textContent='Pay · Price'; $('#rNote').textContent=big?`Includes ${big} large piece${big>1?'s':''}: we'll call to plan ${big>1?'their':'its'} delivery.`:''; $('#rNote').hidden=!big; $('#stub').textContent='';
 }
-function confirmBuy(id){const p=byId[id];
-  if(!S.bought.includes(id)){S.bought.push(id);store.set('bought',S.bought)}
-  S.board=S.board.filter(x=>x!==id);persist();
-  touchSig(id); if(leadId===id)leadId=null; S.order=S.order.filter(x=>x!==id);
-  $('#bigSheet').hidden=true;
-  $('#yImg').style.background=bgOf(p); $('#yImg').className=p.kind==='ai'?'':'cover'; $('#yImg').innerHTML=`<img src="${p.img}" alt=""><span>${LBL[p.kind]}</span>`;
-  $('#yH').innerHTML=`<em>${p.name}</em> is yours.`;
-  $('#ySub').textContent=`Made by hand in Jodhpur. It leaves our workshop in ${p.size==='large'?'7–15':'3–7'} business days.`;
-  $('#yours').hidden=false; $('#yBoard').focus({preventScroll:true}); say(`${p.name} is yours. Prototype checkout.`);
-  render();
-}
-$('#bsBuy').onclick=()=>confirmBuy($('#bsBuy').dataset.id);
-$('#bsBack').onclick=()=>{$('#bigSheet').hidden=true};
-$('#yBoard').onclick=()=>{$('#yours').hidden=true;closePiece();stillNext=boardIds().length>0;renderBoard('swap-in');B.hidden=false;$('#bclose').focus({preventScroll:true});stillNext=false};
-$('#yMore').onclick=$('#yClose').onclick=()=>{$('#yours').hidden=true;closePiece();closeBoard();render()};
-function restart(){closeBoard();S.order=initialOrder();S.hist=[];S.swipes=0;S.noted=false;S.resurf.clear();if(!S.order.length){S.order=ALL.map(p=>p.id).filter(id=>!S.board.includes(id)&&!S.bought.includes(id))}render()}
+function openReview(){retBoard=false;renderReview();B.hidden=true;if(!PR.hidden){PR.hidden=true;cur=null}RV.hidden=false;$('#rBack').focus({preventScroll:true});say(`Review your order: ${$('#rH').textContent}.`)}
+$('#rBack').onclick=()=>{RV.hidden=true;openBoard()};
+$('#rPinGo').onclick=()=>{const v=$('#rPin').value.trim();if(!zone(v)){$('#rPinMsg').textContent='Enter a 6-digit Indian PIN. We ship within India only.';return}store.set('pin',v);renderReview()};
+$('#rPin').addEventListener('keydown',e=>{if(e.key==='Enter')$('#rPinGo').click()});
+$('#rPay').onclick=()=>{$('#stub').textContent='Prototype: Pay is a stub. This is where Shopify checkout opens.'};
+/* profile "Make it yours": put this piece in the order (keeping anything already ticked) and go to review */
+function profileBuy(){if(!cur)return;const id=cur.id;
+  if(!S.board.includes(id)){S.board.push(id);persist();sig(id).k=Date.now();touchSig(id);S.keptAt[id]=S.swipes;render()}
+  if(!selInit){selInit=true;sel=new Set()} sel.add(id); openReview()}
+function restart(){closeBoard();S.order=initialOrder();S.hist=[];S.swipes=0;S.noted=false;S.resurf.clear();if(!S.order.length){S.order=ALL.map(p=>p.id).filter(id=>!S.board.includes(id))}render()}
 
 /* ---- welcome (one tap) ---- */
 function start(room){S.room=room;store.set('room',room);if(room)S.w['r:'+room]=2;$('#welcome').hidden=true;S.order=initialOrder();S.hist=[];render();
@@ -320,14 +314,14 @@ $('#roomBtn').onclick=()=>{$('#welcome').hidden=false};
 $('#keepBtn').onclick=keep;$('#passBtn').onclick=pass;$('#undoBtn').onclick=undo;
 addEventListener('keydown',e=>{
   if(e.target.matches('input,textarea'))return;
-  if(e.key==='Escape'){if(!$('#bigSheet').hidden)$('#bigSheet').hidden=true;else if(!$('#yours').hidden)$('#yMore').click();else if(!PR.hidden)closePiece();else if(!B.hidden)closeBoard();else if(!$('#welcome').hidden&&S.order.length)$('#welcome').hidden=true;return}
-  if(!$('#welcome').hidden||!$('#yours').hidden||!$('#bigSheet').hidden)return;
+  if(e.key==='Escape'){if(!RV.hidden)$('#rBack').click();else if(!PR.hidden)closePiece();else if(!B.hidden)closeBoard();else if(!$('#welcome').hidden&&S.order.length)$('#welcome').hidden=true;return}
+  if(!$('#welcome').hidden||!RV.hidden)return;
   if(!PR.hidden){const k=e.key.toLowerCase();
     if(e.key==='ArrowLeft'){e.preventDefault();showFrame(fi-1)}else if(e.key==='ArrowRight'){e.preventDefault();showFrame(fi+1)}
     else if(e.key==='ArrowDown'&&SC.scrollTop<=0&&!e.target.closest('.pr-body')){e.preventDefault();closePiece()}
     else if(k==='k'){profileDecide('keep')}else if(k==='x'){profileDecide('pass')}
     return}
-  if(!B.hidden){if(e.key==='ArrowLeft'&&!e.target.closest('.b-row')){e.preventDefault();letGo()}else if(e.key==='ArrowRight'&&!e.target.closest('.b-row')){e.preventDefault();makeItYours(leadId)}return}
+  if(!B.hidden)return;
   const k={ArrowRight:keep,ArrowLeft:pass,ArrowUp:()=>S.order[0]&&openPiece(S.order[0]),ArrowDown:undo}[e.key];
   if(k){e.preventDefault();k()}
   if(e.key==='b'||e.key==='B')openBoard();
@@ -335,5 +329,5 @@ addEventListener('keydown',e=>{
 
 /* ---- boot ---- */
 if(S.room!==null&&!new URLSearchParams(location.search).has('welcome'))start(S.room); else {$('#welcome').hidden=false}
-window.__ct={persist,S,SIG,sig,keep,pass,undo,openPiece,openBoard,renderBoard,boardLists,letGo,swapLead,makeItYours,relearn,tasteLine,rankScore};
+window.__ct={persist,S,SIG,sig,keep,pass,undo,openPiece,openBoard,renderBoard,boardLists,selIds,sel:()=>sel,relearn,tasteLine,rankScore};
 })();
