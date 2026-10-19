@@ -10,7 +10,7 @@
   <header class="top">
     <button class="room-btn" id="roomBtn" aria-label="Change room">Living room</button>
     <span class="wm">CRAFTSTALES</span>
-    <button class="board-btn" id="boardBtn" aria-label="Open Board">Board <b id="count">0</b></button>
+    <button class="board-btn" id="boardBtn" aria-label="Open your Board"><b><i aria-hidden="true">♥</i><span id="count">0</span></b></button>
   </header>
   <div class="bgblur" id="bgblur" aria-hidden="true"></div>
   <main class="deck" id="deck" aria-label="Pieces, one at a time"></main>
@@ -67,6 +67,15 @@
         <p class="pr-answer" id="prAnswer" role="status"></p>
         <a class="pr-full" id="prFull" href="#">Open the full page</a>
       </details>
+      <div class="pr-yours" id="prYours">
+        <figure class="pr-yimg" id="prYImg"><img id="prYImgI" alt=""><span id="prYLbl"></span></figure>
+        <p class="eyebrow">Make it yours</p>
+        <h3 class="pr-yname" id="prYName"></h3>
+        <p class="pr-yprice">Price</p>
+        <button class="primary ox" id="prBuy">Buy now</button>
+        <button class="pr-later" id="prLater">♡ Keep for later</button>
+        <p class="pr-trust">7-day returns · handmade in Jodhpur · ships across India</p>
+      </div>
     </div>
   </div>
   <nav class="pr-actions" aria-label="Decide">
@@ -77,17 +86,55 @@
   <p class="pr-keys" aria-hidden="true"><span>←/→ photos</span><span>K keep</span><span>X pass</span><span>↓ close</span></p>
 </section>
 
-<section class="board" id="board" role="dialog" aria-modal="true" aria-labelledby="bh" hidden>
-  <button class="piece__x dark" id="bclose" aria-label="Back to pieces">×</button>
-  <p class="eyebrow" id="beyebrow">Your Board</p>
-  <h2 id="bh">Your Board</h2>
-  <p class="bline" id="bline"></p>
-  <div class="thumbs" id="thumbs"></div>
-  <button class="primary ox" id="buyBtn">Buy</button>
-  <a class="quiet" id="waLink" target="_blank" rel="noopener">Ask on WhatsApp · 90012 91131</a>
-  <a class="quiet" id="visitLink" href="https://maps.google.com/?q=Craftstales+Jodhpur" target="_blank" rel="noopener">Visit the showroom in Jodhpur · open daily 10–7</a>
-  <div class="bfoot"><button class="quiet" id="again">Keep swiping</button><a class="quiet" href="grid.html">See every piece as a grid</a></div>
-  <p class="stub" id="stub" role="status"></p>
+<section class="board" id="board" role="dialog" aria-modal="true" aria-labelledby="bTitle" hidden>
+  <header class="b-top"><span id="bTitle">Your Board <b id="bcount">0</b></span><button class="b-close" id="bclose" aria-label="Back to pieces">×</button></header>
+  <div class="b-lead" id="bLead" role="img" aria-label="">
+    <div class="b-img" id="bImg"></div>
+    <span class="b-stamp go" id="bStampGo" aria-hidden="true">Let it go</span><span class="b-stamp yes" id="bStampYes" aria-hidden="true">Make it yours</span>
+  </div>
+  <div class="b-info" id="bInfo">
+    <p class="b-why" id="bWhy"></p>
+    <div class="b-nm"><button class="b-name" id="bName" aria-label="Open profile"></button><span class="b-price">Price</span></div>
+    <button class="primary ox" id="bBuy">Make it yours</button>
+    <p class="b-gest" aria-hidden="true">← let it go · make it yours →</p>
+  </div>
+  <div class="b-strip" id="bStripWrap"><p>Also kept</p><div class="b-row" id="bStrip"></div></div>
+  <button class="b-more" id="bMore">Keep swiping to find more →</button>
+  <div class="b-emptyv" id="bEmpty">
+    <span class="b-heart" aria-hidden="true">♡</span>
+    <h2>Nothing on your <em>Board</em> yet.</h2>
+    <p>Swipe right on a piece you love. The one you keep coming back to will be waiting here.</p>
+    <button class="primary" id="bBack">Back to the pieces</button>
+    <a class="quiet" href="https://maps.google.com/?q=Craftstales+Jodhpur" target="_blank" rel="noopener">Or visit us in Jodhpur · open daily, 10–7</a>
+  </div>
+  <div class="b-foot">
+    <details class="b-earlier" id="bEarlier"><summary><span id="bEarlierN">Earlier</span><span class="b-mini" id="bEarlierMini"></span></summary><div class="b-row" id="bEarlierList"></div></details>
+    <p class="b-yours" id="bYours"></p>
+  </div>
+  <div class="b-snack" id="bSnack" role="status"><span id="bSnackT"></span><button id="bUndo">Undo</button></div>
+</section>
+<section class="ov yours" id="yours" role="dialog" aria-modal="true" aria-labelledby="yH" hidden>
+  <button class="b-close" id="yClose" aria-label="Close">×</button>
+  <figure id="yImg"></figure>
+  <p class="eyebrow">Order placed · prototype</p>
+  <h2 id="yH"></h2>
+  <p class="y-sub" id="ySub"></p>
+  <p class="y-sub small">7-day returns · report any damage within 48 hours</p>
+  <p class="stub" id="stub">Prototype: Buy is a stub. This is where Shopify checkout would open.</p>
+  <button class="primary" id="yBoard">Back to my Board</button>
+  <button class="quiet" id="yMore">Keep exploring</button>
+</section>
+<section class="ov big" id="bigSheet" role="dialog" aria-modal="true" aria-labelledby="bsH" hidden>
+  <div class="bs-back" id="bsBack"></div>
+  <div class="bs"><span class="grab"></span>
+    <p class="eyebrow" id="bsEy"></p>
+    <h2 id="bsH">A piece this size is best <em>seen live first.</em></h2>
+    <p class="y-sub" id="bsSub"></p>
+    <a class="primary ox" id="bsVideo" target="_blank" rel="noopener">Video call the showroom</a>
+    <a class="primary o" id="bsWa" target="_blank" rel="noopener">Chat on WhatsApp</a>
+    <p class="bs-hours">Open daily, 10–7 · 90012 91131</p>
+    <button class="quiet" id="bsBuy">Buy without a call</button>
+  </div>
 </section>
 <div id="live" class="sr" aria-live="polite"></div>
 <script src="assets/js/data.js"></script>
