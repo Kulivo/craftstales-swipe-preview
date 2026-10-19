@@ -1,0 +1,95 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Craftstales · discover handmade pieces from Jodhpur</title>
+<meta name="description" content="Swipe through handmade mother-of-pearl, bone inlay, marble and mango-wood furniture from Jodhpur. Keep what you love on your Board.">
+<link rel="alternate" href="grid.html" title="All pieces as a grid">
+<link rel="stylesheet" href="assets/css/app.css">
+</head><body>
+<noscript><p style="padding:24px">This view needs JavaScript. <a href="grid.html">See every piece as a grid</a>.</p></noscript>
+<div id="app" class="app">
+  <header class="top">
+    <button class="room-btn" id="roomBtn" aria-label="Change room">Living room</button>
+    <span class="wm">CRAFTSTALES</span>
+    <button class="board-btn" id="boardBtn" aria-label="Open Board">Board <b id="count">0</b></button>
+  </header>
+  <div class="bgblur" id="bgblur" aria-hidden="true"></div>
+  <main class="deck" id="deck" aria-label="Pieces, one at a time"></main>
+  <p class="hint" id="hint">Right to keep · left to pass · up for more</p>
+  <p class="toast" id="toast" role="status"></p>
+  <nav class="controls" aria-label="Actions">
+    <button class="c-pass" id="passBtn" aria-label="Pass">✕</button>
+    <button class="c-undo" id="undoBtn" aria-label="Undo last">↶</button>
+    <button class="c-keep" id="keepBtn" aria-label="Keep on Board">♡</button>
+  </nav>
+  <p class="keys" aria-hidden="true"><span>← pass</span><span>→ keep</span><span>↑ more</span><span>↓ undo</span></p>
+</div>
+
+<section class="welcome" id="welcome" aria-labelledby="wq">
+  <img src="assets/img/rooms/moti.jpg" alt="">
+  <div class="welcome__in">
+    <span class="wm">CRAFTSTALES</span>
+    <h1 id="wq">What are you furnishing?</h1>
+    <div class="rooms" id="rooms">
+      <button data-room="living">Living room</button><button data-room="bedroom">Bedroom</button>
+      <button data-room="dining">Dining</button><button data-room="entry">Entrance</button>
+    </div>
+    <button class="skip" data-room="">Just looking</button>
+    <a class="gridlink" href="grid.html">or see every piece as a grid</a>
+  </div>
+  <span class="ai-note">Concept image</span>
+</section>
+
+<section class="profile" id="profile" role="dialog" aria-modal="true" aria-labelledby="prName" hidden>
+  <div class="pr-scroll" id="prScroll">
+    <div class="pr-hero" id="prHero">
+      <div class="pr-frames" id="prFrames"></div>
+      <div class="pr-segs" id="prSegs" aria-hidden="true"></div>
+      <span class="pr-label" id="prLabel"></span>
+      <button class="pr-close" id="prClose" aria-label="Close profile">⌄</button>
+      <button class="pr-edge l" id="prPrev" tabindex="-1" aria-label="Previous photo"></button><button class="pr-edge r" id="prNext" tabindex="-1" aria-label="Next photo"></button>
+      <div class="pr-shade"></div>
+      <div class="pr-head"><h2 id="prName"></h2><p id="prTag"></p></div>
+      <span class="pr-cue" aria-hidden="true">⌃ about me</span>
+    </div>
+    <div class="pr-body">
+      <p class="pr-bio" id="prBio"></p>
+      <div class="pr-facts" id="prFacts"></div>
+      <p class="pr-price">Price</p>
+      <h3>Pairs well with</h3>
+      <div class="pr-pairs" id="prPairs"></div>
+      <details class="pr-more" id="prMore">
+        <summary>More</summary>
+        <div class="pr-pin"><label for="prPin">Delivery to your PIN</label><div><input id="prPin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" autocomplete="postal-code"><button id="prPinGo">Check</button></div><p id="prPinRes" role="status"></p></div>
+        <h4>Care</h4><p id="prCare"></p>
+        <h4>Returns</h4><p>7-day returns. Report any damage within 48 hours of delivery.</p>
+        <h4 id="prAskH">Ask</h4>
+        <div class="pr-ask" id="prAsk"><button data-q="size">How big is it?</button><button data-q="made">How is it made?</button><button data-q="see">Can I see it first?</button></div>
+        <p class="pr-answer" id="prAnswer" role="status"></p>
+        <a class="pr-full" id="prFull" href="#">Open the full page</a>
+      </details>
+    </div>
+  </div>
+  <nav class="pr-actions" aria-label="Decide">
+    <button class="c-pass" id="prPass" aria-label="Pass">✕</button>
+    <button class="c-ask" id="prAskBtn" aria-label="Ask about this piece">✦</button>
+    <button class="c-keep" id="prKeep" aria-label="Keep on Board">♡</button>
+  </nav>
+  <p class="pr-keys" aria-hidden="true"><span>←/→ photos</span><span>K keep</span><span>X pass</span><span>↓ close</span></p>
+</section>
+
+<section class="board" id="board" role="dialog" aria-modal="true" aria-labelledby="bh" hidden>
+  <button class="piece__x dark" id="bclose" aria-label="Back to pieces">×</button>
+  <p class="eyebrow" id="beyebrow">Your Board</p>
+  <h2 id="bh">Your Board</h2>
+  <p class="bline" id="bline"></p>
+  <div class="thumbs" id="thumbs"></div>
+  <button class="primary ox" id="buyBtn">Buy</button>
+  <a class="quiet" id="waLink" target="_blank" rel="noopener">Ask on WhatsApp · 90012 91131</a>
+  <a class="quiet" id="visitLink" href="https://maps.google.com/?q=Craftstales+Jodhpur" target="_blank" rel="noopener">Visit the showroom in Jodhpur · open daily 10–7</a>
+  <div class="bfoot"><button class="quiet" id="again">Keep swiping</button><a class="quiet" href="grid.html">See every piece as a grid</a></div>
+  <p class="stub" id="stub" role="status"></p>
+</section>
+<div id="live" class="sr" aria-live="polite"></div>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/app.js"></script>
+</body></html>

@@ -1,0 +1,138 @@
+import asyncio, io, os, json
+from PIL import Image
+from playwright.async_api import async_playwright
+U='file:///workspace/craftstales-swipe/'
+errs=[]; log=[]
+def ok(c,m):
+    log.append(('PASS' if c else 'FAIL')+' · '+m)
+def save(png,name):
+    im=Image.open(io.BytesIO(png)).convert('RGB').quantize(256,dither=Image.Dither.FLOYDSTEINBERG); p=f'screens/{name}.png'; im.save(p,optimize=True); return p
+async def count(pg): return int(await pg.inner_text('#count'))
+async def top(pg): return await pg.evaluate("document.querySelector('.card:not(.behind)')?.dataset.id||null")
+async def drag(pg,dx,dy,shot=None):
+    x,y=195,400; await pg.mouse.move(x,y); await pg.mouse.down()
+    for i in range(1,11): await pg.mouse.move(x+dx*i/10,y+dy*i/10); await pg.wait_for_timeout(16)
+    if shot:
+        await pg.wait_for_timeout(100); save(await pg.screenshot(),shot)
+        for i in range(1,6): await pg.mouse.move(x+dx+10*i,y+dy); await pg.wait_for_timeout(16)
+    await pg.mouse.up(); await pg.wait_for_timeout(600)
+async def main():
+    async with async_playwright() as p:
+        b=await p.chromium.launch(executable_path='/usr/bin/google-chrome')
+        ctx=await b.new_context(viewport={'width':390,'height':844},device_scale_factor=2,has_touch=True)
+        pg=await ctx.new_page(); pg.on('pageerror',lambda e:errs.append(str(e))); pg.on('console',lambda m:m.type=='error' and errs.append(m.text))
+        await pg.goto(U+'index.html'); await pg.wait_for_timeout(800)
+        ok(await pg.is_visible('#welcome'),'welcome shows on first visit'); save(await pg.screenshot(),'m01-welcome')
+        await pg.click('#rooms button[data-room=living]'); await pg.wait_for_timeout(700)
+        ok(await pg.is_hidden('#welcome'),'one tap on a room starts the deck'); ok((await pg.inner_text('#roomBtn'))=='Living room','room chip shows choice')
+        save(await pg.screenshot(),'m02-first-card-hint')
+        first=await top(pg)
+        await drag(pg,92,10,shot='m03-dragging-keep')
+        ok(await count(pg)==1 and await top(pg)!=first,'mouse drag right keeps and advances')
+        t=await top(pg); await drag(pg,-140,0); ok(await count(pg)==1 and await top(pg)!=t,'mouse drag left passes')
+        t=await top(pg); await drag(pg,30,0); ok(await top(pg)==t,'short drag snaps back')
+        # touch drag via CDP
+        cdp=await ctx.new_cdp_session(pg); t=await top(pg)
+        await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':195,'y':420}]})
+        for i in range(1,12): await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':195+15*i,'y':420}]}); await pg.wait_for_timeout(16)
+        await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); await pg.wait_for_timeout(650)
+        ok(await count(pg)==2 and await top(pg)!=t,'touch swipe right keeps')
+        ok(await pg.evaluate("document.getElementById('hint').classList.contains('off')"),'hint hides after 2 swipes')
+        # undo via swipe down
+        t=await top(pg); await drag(pg,0,160); ok(await count(pg)==1,'swipe down undoes the last keep')
+        await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(600); ok(await count(pg)==2,'ArrowRight keeps')
+        await pg.click('#passBtn'); await pg.wait_for_timeout(500); await pg.click('#keepBtn'); await pg.wait_for_timeout(600)
+        ok(await count(pg)==3,'Pass/Keep buttons work')
+        await pg.keyboard.press('ArrowLeft'); await pg.wait_for_timeout(450)
+        await pg.keyboard.press('ArrowLeft'); await pg.wait_for_timeout(450)
+        await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(250)
+        sw=await pg.evaluate('__ct.S.swipes'); ok(sw==8,f'swipe count is 8 ({sw})')
+        await pg.wait_for_timeout(500); toast=await pg.inner_text('#toast')
+        ok('lean toward' in toast,f'taste note after 8 swipes: "{toast}"'); save(await pg.screenshot(),'m04-taste-note')
+        order=await pg.evaluate("__ct.S.order.slice(0,6).map(id=>window.CT.find(p=>p.id==id).mat.join('/'))"); log.append('  next after relearn: '+'; '.join(order))
+        # ---- profile ----
+        await pg.wait_for_timeout(2800); t=await top(pg); await pg.keyboard.press('ArrowUp'); await pg.wait_for_timeout(600)
+        ok(await pg.is_visible('#profile'),'ArrowUp opens profile'); ok((await pg.inner_text('#prName'))==await pg.evaluate(f"window.CT.find(p=>p.id=='{t}').name"),'profile shows the top card')
+        nseg=await pg.evaluate("document.querySelectorAll('#prSegs i').length"); nfr=await pg.evaluate(f"window.CT.find(p=>p.id=='{t}').frames.length"); ok(nseg==nfr and nseg>=3,f'segmented bar has {nseg} segments')
+        vis=await pg.evaluate("document.querySelector('.pr-body').getBoundingClientRect().top"); ok(vis>=800,'default profile top shows only photo, name, tagline, buttons')
+        save(await pg.screenshot(),'m05-profile-top')
+        l0=await pg.inner_text('#prLabel'); await pg.mouse.click(350,400); await pg.wait_for_timeout(350); l1=await pg.inner_text('#prLabel'); ok(l0!=l1,f'tap right edge steps photo ({l0} -> {l1})')
+        await pg.mouse.click(40,400); await pg.wait_for_timeout(350); ok(await pg.inner_text('#prLabel')==l0,'tap left edge steps back')
+        await pg.keyboard.press('ArrowRight'); await pg.keyboard.press('ArrowRight'); await pg.keyboard.press('ArrowRight'); await pg.wait_for_timeout(400)
+        ok(await pg.evaluate("document.querySelectorAll('#prSegs i.done').length")==nseg-1,'arrow keys step through photos'); save(await pg.screenshot(),'m06-profile-closeup')
+        await pg.evaluate("document.getElementById('prScroll').scrollTo(0,640)"); await pg.wait_for_timeout(400); save(await pg.screenshot(),'m07-profile-about-me')
+        ok(len(await pg.inner_text('#prBio'))>40 and await pg.evaluate("document.querySelectorAll('#prFacts span').length")>=3,'bio and quick facts present')
+        await pg.click('#prAskBtn'); await pg.wait_for_timeout(700); ok(await pg.evaluate("document.getElementById('prMore').open"),'Ask button opens More')
+        await pg.fill('#prPin','12'); await pg.click('#prPinGo'); ok('6-digit' in await pg.inner_text('#prPinRes'),'invalid PIN handled')
+        await pg.fill('#prPin','400001'); await pg.click('#prPinGo'); await pg.wait_for_timeout(150); ok('Reaches you' in await pg.inner_text('#prPinRes'),'PIN gives a delivery estimate')
+        await pg.click('#prAsk button[data-q=see]'); ok('10–7' in await pg.inner_text('#prAnswer'),'Ask answers one question')
+        await pg.evaluate("document.getElementById('prScroll').scrollTo(0,99999)"); await pg.wait_for_timeout(300); save(await pg.screenshot(),'m08-profile-more')
+        pid=await pg.get_attribute('#prPairs button','data-id'); await pg.click('#prPairs button'); await pg.wait_for_timeout(500)
+        ok((await pg.inner_text('#prName'))==await pg.evaluate(f"window.CT.find(p=>p.id=='{pid}').name"),'Pairs-well-with thumbnail opens that profile')
+        c0=await count(pg); await pg.click('#prKeep'); await pg.wait_for_timeout(300); ok(await count(pg)==c0+1 and await pg.is_visible('#profile'),'Keep on a non-top piece adds to Board, stays open')
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(400); ok(await pg.is_hidden('#profile'),'Esc closes profile')
+        # tap card opens, K keeps and advances
+        t=await top(pg); await pg.mouse.click(195,400); await pg.wait_for_timeout(600); ok(await pg.is_visible('#profile'),'tap opens profile')
+        c0=await count(pg); await pg.keyboard.press('k'); await pg.wait_for_timeout(900); ok(await count(pg)==c0+1 and await top(pg)!=t and await pg.is_hidden('#profile'),'K keeps from profile and advances deck')
+        t=await top(pg); await drag(pg,0,-160); await pg.wait_for_timeout(200); ok(await pg.is_visible('#profile'),'swipe up opens profile')
+        await pg.click('#prPass'); await pg.wait_for_timeout(900); ok(await top(pg)!=t and await pg.is_hidden('#profile'),'Pass from profile advances deck')
+        # swipe down closes (mouse)
+        await pg.mouse.click(195,400); await pg.wait_for_timeout(600)
+        await pg.mouse.move(195,300); await pg.mouse.down()
+        for k in range(1,11): await pg.mouse.move(195,300+18*k); await pg.wait_for_timeout(16)
+        await pg.mouse.up(); await pg.wait_for_timeout(500); ok(await pg.is_hidden('#profile'),'mouse swipe down closes profile')
+        # touch: open by tap, horizontal swipe steps exactly one photo, swipe down closes
+        await pg.mouse.click(195,400); await pg.wait_for_timeout(600)
+        async def tdrag(x0,y0,x1,y1):
+            await cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x0,'y':y0}]})
+            for k in range(1,11): await cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x0+(x1-x0)*k/10,'y':y0+(y1-y0)*k/10}]}); await pg.wait_for_timeout(16)
+            await cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); await pg.wait_for_timeout(450)
+        await tdrag(300,450,120,455); ok(await pg.evaluate("document.querySelectorAll('#prSegs i.done').length")==1,'touch swipe steps exactly one photo')
+        await tdrag(195,300,195,520); ok(await pg.is_hidden('#profile'),'touch swipe down closes profile')
+        # board mid-way
+        await pg.click('#boardBtn'); await pg.wait_for_timeout(400); ok(await pg.is_visible('#board'),'Board opens'); save(await pg.screenshot(),'m09-board')
+        await pg.click('#again'); await pg.wait_for_timeout(300)
+        # run to end
+        n=0
+        while await top(pg) and n<80:
+            await pg.keyboard.press('ArrowRight' if n%3==0 else 'ArrowLeft'); await pg.wait_for_timeout(450); n+=1
+        await pg.wait_for_timeout(500)
+        ok(await pg.is_visible('#board'),f'end of deck shows Board summary after {n} more swipes')
+        ok('every piece' in (await pg.inner_text('#beyebrow')).lower(),'end-of-deck heading')
+        wa=await pg.get_attribute('#waLink','href'); ok(wa.startswith('https://wa.me/919001291131?text='),'WhatsApp link prefilled')
+        await pg.click('#buyBtn'); await pg.wait_for_timeout(200); ok('Shopify cart' in await pg.inner_text('#stub'),'Buy stub responds')
+        save(await pg.screenshot(),'m10-end-of-deck-board')
+        # undo from end state
+        await pg.keyboard.press('Escape'); await pg.wait_for_timeout(200)
+        await pg.click('#undoBtn'); await pg.wait_for_timeout(500); ok(await top(pg) is not None,'undo works from the end of the deck')
+        # persistence + no duplicates on reload
+        bd=await pg.evaluate('__ct.S.board'); ok(len(bd)==len(set(bd)),'Board has no duplicates')
+        await pg.reload(); await pg.wait_for_timeout(700); ok(await count(pg)==len(bd) and await pg.is_hidden('#welcome'),'Board and room persist across reload')
+        ok(all(x not in bd for x in await pg.evaluate('__ct.S.order')),'kept pieces are not re-dealt')
+        # room change
+        await pg.click('#roomBtn'); await pg.click('#rooms button[data-room=bedroom]'); await pg.wait_for_timeout(500)
+        t=await top(pg); r=await pg.evaluate(f"window.CT.find(p=>p.id=='{t}').rooms"); ok('bedroom' in r,'room change re-deals bedroom pieces first')
+        # deep link from static page
+        await pg.goto(U+'index.html#moti-trio'); await pg.reload(); await pg.wait_for_timeout(700); ok(await pg.is_visible('#profile') and (await pg.inner_text('#prName'))=='Moti Trio','deep link #moti-trio opens that profile')
+        # accessibility basics
+        labs=await pg.evaluate("[...document.querySelectorAll('button')].filter(b=>!(b.getAttribute('aria-label')||b.textContent.trim())).length"); ok(labs==0,'every button has an accessible name')
+        imgs=await pg.evaluate("[...document.querySelectorAll('img')].filter(i=>!i.complete||i.naturalWidth==0).length"); ok(imgs==0,'no broken images in app')
+        await ctx.close()
+        # fresh mobile for clean deck shot (no hint) + desktop
+        ctx=await b.new_context(viewport={'width':1440,'height':900},device_scale_factor=1.5)
+        pg=await ctx.new_page(); pg.on('pageerror',lambda e:errs.append(str(e)))
+        await pg.goto(U+'index.html'); await pg.wait_for_timeout(600); save(await pg.screenshot(),'d01-desktop-welcome')
+        await pg.click('#rooms button[data-room=living]'); await pg.wait_for_timeout(700)
+        for k in ['ArrowLeft','ArrowLeft']: await pg.keyboard.press(k); await pg.wait_for_timeout(450)
+        save(await pg.screenshot(),'d02-desktop-card-keyboard')
+        await pg.keyboard.press('ArrowUp'); await pg.wait_for_timeout(600); save(await pg.screenshot(),'d03-desktop-profile'); await pg.evaluate("document.getElementById('prScroll').scrollTo(0,700)"); await pg.wait_for_timeout(300); save(await pg.screenshot(),'d04-desktop-profile-about')
+        await pg.keyboard.press('k'); await pg.wait_for_timeout(900); await pg.keyboard.press('b'); await pg.wait_for_timeout(400); save(await pg.screenshot(),'d05-desktop-board')
+        # grid & static piece
+        pg2=await ctx.new_page(); await pg2.set_viewport_size({'width':390,'height':844}); await pg2.goto(U+'grid.html'); await pg2.wait_for_timeout(800)
+        bro=await pg2.evaluate("[...document.images].filter(i=>i.naturalWidth==0).length"); await pg2.evaluate("document.querySelectorAll('img').forEach(i=>i.loading='eager')"); await pg2.wait_for_timeout(800)
+        save(await pg2.screenshot(),'m11-grid-for-google-and-people')
+        await pg2.goto(U+'pieces/moti-console.html'); await pg2.wait_for_timeout(500); ok(await pg2.evaluate("!!document.querySelector('script[type=\"application/ld+json\"]')"),'static piece page has JSON-LD'); save(await pg2.screenshot(),'m12-static-piece-page')
+        await ctx.close(); await b.close()
+    log.append(f'JS errors: {len(errs)} {errs[:5]}')
+    open('TEST_RESULTS.txt','w').write('\n'.join(log)+'\n'); print('\n'.join(log))
+asyncio.run(main())
