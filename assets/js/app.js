@@ -3,8 +3,8 @@
 const ALL=window.CT, byId=Object.fromEntries(ALL.map(p=>[p.id,p]));
 const $=s=>document.querySelector(s);
 const ROOMS={living:'Living room',bedroom:'Bedroom',dining:'Dining',entry:'Entrance','':'Every room'};
-const MATW={pearl:'pearl',bone:'bone inlay',marble:'marble',glass:'glass',brass:'brass',mango:'mango wood',iron:'iron',steel:'steel',cane:'cane',travertine:'travertine'};
-const LBL={ai:'Concept image',real:'Showroom photo',product:'Product photo'};
+const MATW={brass:'antique brass',nickel:'nickel',iron:'hand-punched iron',bone:'bone inlay',wood:'wood',reclaimed:'reclaimed wood',travertine:'travertine',mango:'mango wood'};
+const LBL={ai:'Concept image',product:'Product photo'};
 const store={get(k,d){try{const v=localStorage.getItem('ct-swipe-'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('ct-swipe-'+k,JSON.stringify(v))}catch(e){}}};
 let S={room:store.get('room',null),board:store.get('board',[]),bought:store.get('bought',[]),resurfaced:store.get('resurfaced',[]),resurf:new Set(),keptAt:{},order:[],w:{},swipes:0,hist:[],noted:false,hinted:store.get('hinted',false)};
 /* ---- silent intent signals per piece: dwell ms, profile opens, photos seen, revisits, kept time, last touch ---- */
@@ -18,7 +18,8 @@ const rankScore=id=>{const g=sig(id);return Math.min(g.d/1000,40)*.5+g.o*2+g.ph+
 let topT=null;
 const feats=p=>[...p.mat.map(m=>'m:'+m),'s:'+p.shape,...p.rooms.map(r=>'r:'+r),'z:'+p.size,'c:'+p.coll];
 const score=p=>feats(p).reduce((a,f)=>a+(S.w[f]||0),0);
-const isLight=hex=>{const n=parseInt(hex.slice(1),16);return ((n>>16)*.299+((n>>8)&255)*.587+(n&255)*.114)>165};
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const inr=n=>'₹'+Math.round(n).toLocaleString('en-IN');
 const say=t=>{$('#live').textContent=t};
 
 /* ---- ordering: diverse first, learned later ---- */
@@ -47,13 +48,12 @@ let toastT;function toast(h,ms=3200){const t=$('#toast');t.innerHTML=h;t.classLi
 /* ---- render ---- */
 const deck=$('#deck');
 function cardEl(p,behind){
-  const el=document.createElement('article');
-  el.className='card'+(p.kind==='ai'?' ai':'')+(behind?' behind':'')+(!p.blur&&isLight(p.bg)?' lightbg':'');
-  el.dataset.id=p.id; el.setAttribute('aria-label',`${p.name}. ${p.collName}, ${p.type}. Price to be added.`);
-  el.style.background=p.kind==='ai'?`linear-gradient(${p.bgt} 0%,${p.bgt} 22%,${p.bgb} 78%,${p.bgb})`:p.bg;
-  el.innerHTML=`${p.blur?`<div class="bgimg" style="background-image:url(assets/img/cards/${p.id}-bg.jpg)"></div>`:''}<img src="${p.img}" alt="${p.name}, ${p.craft.toLowerCase()}" draggable="false">
-   <span class="tag">${LBL[p.kind]}</span><div class="shade"></div>
-   <div class="meta">${S.resurf.has(p.id)?'<p class="again">Still thinking about this?</p>':''}<h2>${p.name}</h2><p class="price">Price${S.resurf.has(p.id)?' · on your Board':''}</p></div>
+  const el=document.createElement('article'), again=S.resurf.has(p.id);
+  el.className='card'+(p.kind==='ai'?' ai':'')+(behind?' behind':'');
+  el.dataset.id=p.id; el.setAttribute('aria-label',`${p.name}. ${p.collName}, ${p.type}. ${p.priceText}${p.size==='large'?'. Large piece':''}.`);
+  el.innerHTML=`<div class="photo" style="background:${p.bg}"><img src="${p.img}" alt="${esc(p.alt||p.name)}" draggable="false"><span class="tag">${LBL[p.kind]}</span></div>
+   <div class="meta">${again?'<p class="again">Still thinking about this?</p>':''}<p class="eyebrow">${esc(p.craft)}${p.fin?' · '+esc(p.fin):''}</p><h2>${esc(p.name)}</h2><p class="line">${esc(p.tagline)}</p>
+   <p class="price"><b>${p.priceText}</b>${p.compareText?`<s>${p.compareText}</s>`:''}${p.size==='large'?'<span class="lg">Large piece</span>':''}${again?'<span class="onb">on your Board</span>':''}</p></div>
    <div class="stamp keep">Kept</div><div class="stamp pass">Pass</div>`;
   return el;
 }
@@ -61,7 +61,7 @@ function render(){
   deck.innerHTML='';
   const [a,b]=S.order;
   if(b)deck.appendChild(cardEl(byId[b],true));
-  if(a){const el=cardEl(byId[a],false);deck.appendChild(el);bindDrag(el);$('#bgblur').style.backgroundImage=`url(${byId[a].img})`;if(!topT||topT.id!==a)topT={id:a,t:Date.now()}}
+  if(a){const el=cardEl(byId[a],false);deck.appendChild(el);bindDrag(el);if(!topT||topT.id!==a)topT={id:a,t:Date.now()}}
   else deck.appendChild(endCard());
   const n=boardIds().length; $('#count').textContent=n; $('#boardBtn').setAttribute('aria-label',`Open your Board, ${n} kept`);
   $('#undoBtn').disabled=!S.hist.length;
@@ -149,7 +149,7 @@ function zone(pin){if(!/^[1-8]\d{5}$/.test(pin))return null;const p2=pin.slice(0
 function eta(p,pin){const z=zone(pin);if(!z)return null;const big=p.size==='large',d=big?[7,15]:[3,7],now=new Date();
   const l1=workdays(now,d[0]),l2=workdays(now,d[1]),a1=new Date(l1),a2=new Date(l2);a1.setDate(a1.getDate()+z.t[0]);a2.setDate(a2.getDate()+z.t[1]);
   return `Leaves Jodhpur ${fmt(l1)}–${fmt(l2)}${big?', crated':''}. Reaches you about <em>${fmt(a1)} – ${fmt(a2)}</em>. <span style="color:#8a7d70;font-size:12px">Transit days are a sample.</span>`}
-const ANS={size:p=>p.h?`About ${p.h.replace(' est.','')} high${p.h.includes('~')?' (an estimate until measured)':''}.`:`Measurements coming soon. Ask us on WhatsApp.`,
+const ANS={size:p=>p.h?`About ${p.h} (W × D × H).${p.size==='large'?' A large piece: we call to plan delivery.':''}`:p.diagram?`The last photo shows the measurements.${p.size==='large'?' A large piece: we call to plan delivery.':''}`:`Ask us on WhatsApp 90012 91131 for exact measurements.`,
   made:p=>`${p.craft}, made by hand in Jodhpur.`,see:p=>`Walk into our Jodhpur showroom, open daily 10–7, or ask for a video call on WhatsApp 90012 91131.`};
 function showFrame(n){const f=cur.frames;fi=(n+f.length)%f.length;seen.add(fi);const g=sig(cur.id);if(seen.size>g.ph){g.ph=seen.size;saveSig()}
   PR.querySelectorAll('.pr-frames figure').forEach((x,k)=>x.classList.toggle('on',k===fi));
@@ -160,13 +160,14 @@ function openPiece(id){
   const g=sig(id); if(g.o>0||S.board.includes(id))g.r++; g.o++; g.l=Date.now(); saveSig();
   cur=p; fi=0; prT=Date.now(); seen=new Set();
   feats(p).forEach(k=>S.w[k]=(S.w[k]||0)+.4);
-  $('#prFrames').innerHTML=p.frames.map((f,k)=>`<figure style="background:${f.fit==='contain'&&p.kind==='ai'&&f.src===p.img?`linear-gradient(${p.bgt},${p.bgt} 22%,${p.bgb} 78%,${p.bgb})`:f.bg}"><img src="${f.src}" alt="${p.name}: ${f.label}" style="object-fit:${f.fit}" ${k?'loading="lazy"':''}></figure>`).join('');
+  $('#prFrames').innerHTML=p.frames.map((f,k)=>`<figure style="background:${f.bg}"><img src="${f.src}" alt="${esc(f.alt||p.name+': '+f.label)}" style="object-fit:${f.label==='Dimensions'?'contain':'cover'}" ${k?'loading="lazy"':''}></figure>`).join('');
   $('#prSegs').innerHTML=p.frames.map(()=>'<i></i>').join('');
-  $('#prName').textContent=p.name; $('#prTag').textContent=p.tagline.slice(p.tagline.indexOf(',')+2).replace(/^./,c=>c.toUpperCase());
+  $('#prName').textContent=p.name; $('#prTag').textContent=p.tagline; $('#prEyebrow').textContent=p.craft+(p.fin?' · '+p.fin:'');
+  const pt=p.priceText+(p.compareText?` <s>${p.compareText}</s>`:''); $('#prPrice').innerHTML=pt; $('#prHPrice').innerHTML=pt+(p.size==='large'?'<span class="lg">Large piece</span>':''); $('#prYPrice').textContent=p.priceText;
   $('#prBio').textContent=p.bio; $('#prFacts').innerHTML=p.facts.map(f=>`<span>${f}</span>`).join('');
-  $('#prPairs').innerHTML=p.pairs.map(o=>`<button data-id="${o}" aria-label="Open ${byId[o].name}"><img src="${byId[o].img}" alt="">${byId[o].name}</button>`).join('');
-  $('#prYImg').style.background=p.kind==='ai'?`linear-gradient(${p.bgt},${p.bgb})`:p.bg; $('#prYImg').className='pr-yimg'+(p.kind==='ai'?'':' cover');
-  $('#prYImgI').src=p.img; $('#prYLbl').textContent=LBL[p.kind]; $('#prYName').textContent=p.name;
+  $('#prPairs').innerHTML=p.pairs.map(o=>`<button data-id="${o}" aria-label="Open ${byId[o].name}"><img src="${byId[o].thumb}" alt="" loading="lazy">${esc(byId[o].name)}<small>${byId[o].priceText}</small></button>`).join('');
+  $('#prYImg').style.background=p.bg; $('#prYImg').className='pr-yimg cover';
+  $('#prYImgI').src=p.thumb; $('#prYLbl').textContent=LBL[p.kind]; $('#prYName').textContent=p.name;
   $('#prCare').textContent=p.care; $('#prFull').href=`pieces/${p.id}.html`;
   $('#prMore').open=false; $('#prAnswer').textContent=''; PR.querySelectorAll('.pr-ask button').forEach(b=>b.classList.remove('on'));
   const pin=store.get('pin','');$('#prPin').value=pin;$('#prPinRes').innerHTML=pin?eta(p,pin)||'':'';
@@ -175,7 +176,7 @@ function openPiece(id){
 }
 function syncKeep(){const k=$('#prKeep'),on=cur&&S.board.includes(cur.id);k.classList.toggle('done',!!on);k.setAttribute('aria-label',on?'On your Board':'Keep on Board');k.textContent=on?'♥':'♡';
   const l=$('#prLater');l.textContent=on?'♥ On your Board':'♡ Keep for later';l.classList.toggle('done',!!on);
-  const others=selIds().filter(x=>x!==cur.id).length;$('#prBuy').textContent=others?`Buy ${others+1} pieces · review order`:'Buy now'}
+  const others=selIds().filter(x=>x!==cur.id);$('#prBuy').textContent=others.length?`Buy ${others.length+1} pieces · ${total([...others,cur.id])}`:`Buy now · ${cur.priceText}`}
 function closePiece(cb){if(PR.hidden){cb&&cb();return}if(cur)addDwell(cur.id,Date.now()-prT);PR.classList.add('closing');setTimeout(()=>{PR.hidden=true;PR.classList.remove('closing');cur=null;if(retBoard){retBoard=false;renderBoard();B.hidden=false}cb&&cb()},cb?260:280)}
 function profileDecide(kind){ if(!cur)return; const id=cur.id;
   if(S.order[0]===id){closePiece(()=>kind==='keep'?keep():pass());return}
@@ -213,7 +214,7 @@ $('#prPinGo').onclick=pinGo; $('#prPin').addEventListener('keydown',e=>{if(e.key
 /* ---- Board: tick what you want, buy together (no gestures) ---- */
 const B=$('#board'), RV=$('#review');
 let leadId=null, sel=new Set(), selInit=false, snackT, lastRm=null, retBoard=false;
-const bgOf=p=>p.kind==='ai'?`linear-gradient(${p.bgt},${p.bgt} 22%,${p.bgb} 78%,${p.bgb})`:p.bg;
+const bgOf=p=>p.bg;
 function boardLists(){
   const now=Date.now(), ids=boardIds();
   let act=ids.filter(id=>now-(sig(id).l||sig(id).k||now)<STALE), early=ids.filter(id=>!act.includes(id));
@@ -233,19 +234,19 @@ function why(id,act){const g=sig(id),p=byId[id];
 const selIds=()=>boardIds().filter(id=>sel.has(id));
 function tickBtn(id,big){const on=sel.has(id),n=byId[id].name;return `<button class="tick${on?' on':''}${big?' big':''}" data-act="tick" data-id="${id}" role="checkbox" aria-checked="${on}" aria-label="Select ${n}">${on?'✓':''}</button>`}
 function rowEl(id){const p=byId[id],on=sel.has(id);
-  return `<div class="b-row${on?' sel':''}" data-id="${id}"><button class="b-th${p.kind==='ai'?'':' cover'}" data-act="open" data-id="${id}" style="background:${bgOf(p)}" aria-label="Details: ${p.name}"><img src="${p.img}" alt=""></button>
-   <div class="b-rt"><p class="b-rn">${p.name}${p.size==='large'?'<span class="lg">Large piece</span>':''}</p><p class="b-rp">Price<span class="dot">·</span><button class="lnk" data-act="open" data-id="${id}">Details ›</button><span class="dot">·</span><button class="lnk" data-act="remove" data-id="${id}">Remove</button></p></div>${tickBtn(id)}</div>`}
+  return `<div class="b-row${on?' sel':''}" data-id="${id}"><button class="b-th cover" data-act="open" data-id="${id}" style="background:${bgOf(p)}" aria-label="Details: ${esc(p.name)}"><img src="${p.thumb}" alt=""></button>
+   <div class="b-rt"><p class="b-rn">${esc(p.name)}${p.size==='large'?'<span class="lg">Large piece</span>':''}</p>${p.fin?`<p class="b-fin">${esc(p.fin)}</p>`:''}<p class="b-rp"><span class="b-rpp">${p.priceText}</span><span class="dot">·</span><button class="lnk" data-act="open" data-id="${id}">Details ›</button><span class="dot">·</span><button class="lnk" data-act="remove" data-id="${id}">Remove</button></p></div>${tickBtn(id)}</div>`}
 function renderBoard(){
   const {act,early}=boardLists(), lead=act[0], all=[...act,...early];
   if(!selInit&&lead){sel=new Set([lead]);selInit=true}
   B.classList.toggle('is-empty',!lead); $('#bcount').textContent=all.length; leadId=lead||null;
   if(lead){const p=byId[lead],on=sel.has(lead);
-    const L=$('#bLead'); L.className='b-lead'+(p.kind==='ai'?'':' cover')+(on?' sel':''); L.style.background=bgOf(p);
+    const L=$('#bLead'); L.className='b-lead'+(on?' sel':''); L.style.background=bgOf(p);
     $('#bPic').innerHTML=`<img src="${p.img}" alt="">`; $('#bPic').setAttribute('aria-label',`Details: ${p.name}`);
     $('#bChip').textContent=LBL[p.kind];
     const t=$('#bTick'); t.className='tick big'+(on?' on':''); t.textContent=on?'✓':''; t.setAttribute('aria-checked',on); t.setAttribute('aria-label',`Select ${p.name}`); t.dataset.id=lead;
     $('#bWhy').textContent=act.length===1&&!early.length?'The only piece on your Board':why(lead,act);
-    $('#bName').textContent=p.name; $('#bLarge').hidden=p.size!=='large';
+    $('#bName').textContent=p.name; $('#bFin').textContent=p.fin||p.craft; $('#bPrice').textContent=p.priceText; $('#bLarge').hidden=p.size!=='large';
     const pr=p.pairs.filter(o=>all.includes(o)&&o!==lead).map(o=>byId[o].name);
     $('#bPairs').hidden=!pr.length; $('#bPairs').innerHTML=pr.length?`<span aria-hidden="true">✦</span> Pairs with ${pr.join(' and ')}, also on your Board`:'';
     $('#bAlso').textContent=act.length>1?`Also kept · ${act.length-1}`:'';
@@ -256,8 +257,9 @@ function renderBoard(){
   $('#bAll').textContent=allOn?'Clear all':'Select all'; $('#bAll').hidden=all.length<2; $('#bListHead').hidden=!lead;
   syncBuy();
 }
+const total=ids=>inr(ids.reduce((a,id)=>a+byId[id].price,0));
 function syncBuy(){const ids=selIds(),n=ids.length,big=ids.filter(id=>byId[id].size==='large').length,b=$('#bBuy');
-  b.disabled=!n; b.textContent=n?`Buy ${n} piece${n>1?'s':''} · Price`:'Select a piece';
+  b.disabled=!n; b.textContent=n?`Buy ${n} piece${n>1?'s':''} · ${total(ids)}`:'Select a piece';
   const note=big?`Includes ${big} large piece${big>1?'s':''}: we'll call to plan ${big>1?'their':'its'} delivery.`:'';
   $('#bNote').textContent=note; $('#bNote').hidden=!note; $('#bSticky').hidden=B.classList.contains('is-empty');
   if(!PR.hidden&&cur)syncKeep();
@@ -288,9 +290,9 @@ function etaText(p,pin){const r=pin&&eta(p,pin);
   return base+(p.size==='large'?'<br>We\'ll call to plan delivery.':'')}
 function renderReview(){const ids=selIds(),pin=store.get('pin',''),big=ids.filter(id=>byId[id].size==='large').length;
   $('#rH').textContent=`${ids.length} piece${ids.length>1?'s':''}`;
-  $('#rList').innerHTML=ids.map(id=>{const p=byId[id];return `<div class="r-row"><div class="b-th${p.kind==='ai'?'':' cover'}" style="background:${bgOf(p)}"><img src="${p.img}" alt=""></div><div class="b-rt"><div class="r-h"><p class="b-rn">${p.name}</p><span class="b-price">Price</span></div><p class="r-eta">${etaText(p,pin)}</p></div></div>`}).join('');
+  $('#rList').innerHTML=ids.map(id=>{const p=byId[id];return `<div class="r-row"><div class="b-th cover" style="background:${bgOf(p)}"><img src="${p.thumb}" alt=""></div><div class="b-rt"><div class="r-h"><p class="b-rn">${esc(p.name)}${p.fin?`<span class="b-fin">${esc(p.fin)}</span>`:''}</p><span class="b-price">${p.priceText}</span></div><p class="r-eta">${etaText(p,pin)}</p></div></div>`}).join('');
   $('#rPin').value=pin; $('#rPinMsg').textContent='';
-  $('#rPay').textContent='Pay · Price'; $('#rNote').textContent=big?`Includes ${big} large piece${big>1?'s':''}: we'll call to plan ${big>1?'their':'its'} delivery.`:''; $('#rNote').hidden=!big; $('#stub').textContent='';
+  $('#rTotal').textContent=total(ids); $('#rPay').textContent=`Pay · ${total(ids)}`; $('#rNote').textContent=big?`Includes ${big} large piece${big>1?'s':''}: we'll call to plan ${big>1?'their':'its'} delivery.`:''; $('#rNote').hidden=!big; $('#stub').textContent='';
 }
 function openReview(){retBoard=false;renderReview();B.hidden=true;if(!PR.hidden){PR.hidden=true;cur=null}RV.hidden=false;$('#rBack').focus({preventScroll:true});say(`Review your order: ${$('#rH').textContent}.`)}
 $('#rBack').onclick=()=>{RV.hidden=true;openBoard()};
@@ -329,5 +331,5 @@ addEventListener('keydown',e=>{
 
 /* ---- boot ---- */
 if(S.room!==null&&!new URLSearchParams(location.search).has('welcome'))start(S.room); else {$('#welcome').hidden=false}
-window.__ct={persist,S,SIG,sig,keep,pass,undo,openPiece,openBoard,renderBoard,boardLists,selIds,sel:()=>sel,relearn,tasteLine,rankScore};
+window.__ct={ALL,byId,persist,S,SIG,sig,keep,pass,undo,openPiece,openBoard,renderBoard,boardLists,selIds,sel:()=>sel,relearn,tasteLine,rankScore};
 })();

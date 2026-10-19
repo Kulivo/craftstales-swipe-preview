@@ -1,7 +1,8 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="theme-color" content="#FAF7F2">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Craftstales · discover handmade pieces from Jodhpur</title>
-<meta name="description" content="Swipe through handmade mother-of-pearl, bone inlay, marble and mango-wood furniture from Jodhpur. Keep what you love on your Board.">
+<meta name="description" content="Swipe through handmade hand-punched iron, bone inlay, reclaimed wood and travertine pieces from Jodhpur. Keep what you love on your Board.">
 <link rel="alternate" href="grid.html" title="All pieces as a grid">
 <link rel="stylesheet" href="assets/css/app.css">
 </head><body>
@@ -12,7 +13,6 @@
     <span class="wm">CRAFTSTALES</span>
     <button class="board-btn" id="boardBtn" aria-label="Open your Board"><b><i aria-hidden="true">♥</i><span id="count">0</span></b></button>
   </header>
-  <div class="bgblur" id="bgblur" aria-hidden="true"></div>
   <main class="deck" id="deck" aria-label="Pieces, one at a time"></main>
   <p class="hint" id="hint">Right to keep · left to pass · up for more</p>
   <p class="toast" id="toast" role="status"></p>
@@ -25,9 +25,10 @@
 </div>
 
 <section class="welcome" id="welcome" aria-labelledby="wq">
-  <img src="assets/img/rooms/moti.jpg" alt="">
+  <img src="assets/img/p/travertine-coffee-table-sphere-legs/02.webp" alt="">
   <div class="welcome__in">
     <span class="wm">CRAFTSTALES</span>
+    <p class="eyebrow">Handmade in Jodhpur</p>
     <h1 id="wq">What are you furnishing?</h1>
     <div class="rooms" id="rooms">
       <button data-room="living">Living room</button><button data-room="bedroom">Bedroom</button>
@@ -36,7 +37,7 @@
     <button class="skip" data-room="">Just looking</button>
     <a class="gridlink" href="grid.html">or see every piece as a grid</a>
   </div>
-  <span class="ai-note">Concept image</span>
+  <span class="ai-note">Product photo</span>
 </section>
 
 <section class="profile" id="profile" role="dialog" aria-modal="true" aria-labelledby="prName" hidden>
@@ -47,14 +48,14 @@
       <span class="pr-label" id="prLabel"></span>
       <button class="pr-close" id="prClose" aria-label="Close profile">⌄</button>
       <button class="pr-edge l" id="prPrev" tabindex="-1" aria-label="Previous photo"></button><button class="pr-edge r" id="prNext" tabindex="-1" aria-label="Next photo"></button>
-      <div class="pr-shade"></div>
-      <div class="pr-head"><h2 id="prName"></h2><p id="prTag"></p></div>
+            
       <span class="pr-cue" aria-hidden="true">⌃ about me</span>
+      <div class="pr-head"><p class="eyebrow" id="prEyebrow"></p><h2 id="prName"></h2><p class="pr-tag" id="prTag"></p><p class="pr-hprice" id="prHPrice"></p></div>
     </div>
     <div class="pr-body">
       <p class="pr-bio" id="prBio"></p>
       <div class="pr-facts" id="prFacts"></div>
-      <p class="pr-price">Price</p>
+      <p class="pr-price" id="prPrice"></p>
       <h3>Pairs well with</h3>
       <div class="pr-pairs" id="prPairs"></div>
       <details class="pr-more" id="prMore">
@@ -71,7 +72,7 @@
         <figure class="pr-yimg" id="prYImg"><img id="prYImgI" alt=""><span id="prYLbl"></span></figure>
         <p class="eyebrow">Make it yours</p>
         <h3 class="pr-yname" id="prYName"></h3>
-        <p class="pr-yprice">Price</p>
+        <p class="pr-yprice" id="prYPrice"></p>
         <button class="primary ox" id="prBuy">Buy now</button>
         <button class="pr-later" id="prLater">♡ Keep for later</button>
         <p class="pr-trust">7-day returns · handmade in Jodhpur · ships across India</p>
@@ -97,7 +98,8 @@
       </div>
       <div class="b-info">
         <p class="b-why" id="bWhy"></p>
-        <div class="b-nm"><h2 id="bName"></h2><span class="b-price">Price</span></div>
+        <div class="b-nm"><h2 id="bName"></h2><span class="b-price" id="bPrice"></span></div>
+        <p class="b-fin" id="bFin"></p>
         <p class="b-links"><span class="lg" id="bLarge" hidden>Large piece</span><button class="lnk" id="bDetails">Details ›</button><button class="lnk" id="bRemove">Remove</button></p>
         <p class="b-pairs" id="bPairs" hidden></p>
       </div>
@@ -116,7 +118,7 @@
     </div>
   </div>
   <div class="b-snack" id="bSnack" role="status"><span id="bSnackT"></span><button id="bUndo">Undo</button></div>
-  <div class="b-sticky" id="bSticky"><button class="primary ox" id="bBuy">Buy 1 piece · Price</button><p class="b-note" id="bNote" role="status"></p></div>
+  <div class="b-sticky" id="bSticky"><button class="primary ox" id="bBuy">Buy 1 piece</button><p class="b-note" id="bNote" role="status"></p></div>
 </section>
 <section class="ov review" id="review" role="dialog" aria-modal="true" aria-labelledby="rH" hidden>
   <header class="b-top"><button class="r-back" id="rBack">‹ Board</button></header>
@@ -125,10 +127,10 @@
     <h2 id="rH"></h2>
     <div id="rList"></div>
     <div class="r-pin"><label for="rPin">Delivery to PIN</label><div><input id="rPin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" autocomplete="postal-code"><button id="rPinGo">Check</button></div><p id="rPinMsg" role="status"></p></div>
-    <div class="r-tot"><span>Total</span><span class="b-price">Price</span></div>
+    <div class="r-tot"><span>Total</span><span class="b-price" id="rTotal"></span></div>
     <p class="r-trust">7-day returns · report damage within 48 hours · handmade in Jodhpur · ships across India</p>
   </div>
-  <div class="b-sticky"><button class="primary ox" id="rPay">Pay · Price</button><p class="b-note" id="rNote"></p><p class="stub" id="stub" role="status"></p></div>
+  <div class="b-sticky"><button class="primary ox" id="rPay">Pay</button><p class="b-note" id="rNote"></p><p class="stub" id="stub" role="status"></p></div>
 </section>
 <div id="live" class="sr" aria-live="polite"></div>
 <script src="assets/js/data.js"></script>
